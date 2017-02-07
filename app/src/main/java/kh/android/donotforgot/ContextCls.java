@@ -5,8 +5,6 @@ import android.app.AlertDialog;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -14,7 +12,6 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -36,69 +33,6 @@ import java.util.Set;
  */
 
 public class ContextCls {
-    public static class StarterReceiver extends BroadcastReceiver {
-        public StarterReceiver () {
-        }
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            context.startService(new Intent(context.getApplicationContext(), NotificationService.class));
-        }
-    }
-    public static class NotificationService extends Service {
-        private NotificationManager mNotificationManager;
-        private static final int ID = 0;
-        private ArrayList<Item> mList;
-        @Override
-        public void onCreate() {
-            super.onCreate();
-            mNotificationManager = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
-            mList = Item.getList(getApplicationContext());
-        }
-
-        @Override
-        public int onStartCommand(Intent intent, int flags, int startId) {
-            Notification notification = buildNotification();
-            mNotificationManager.notify(ID, notification);
-            startForeground(ID, notification);
-            return START_STICKY;
-        }
-
-        @Override
-        public IBinder onBind(Intent intent) {
-            return null;
-        }
-
-        private Notification buildNotification () {
-            Notification.Builder builder = new Notification.Builder(this);
-            builder.setOngoing(true);
-            builder.setSmallIcon(android.R.drawable.sym_def_app_icon);
-            if (Build.VERSION.SDK_INT >= 21) {
-                builder.setVisibility(Notification.VISIBILITY_SECRET);
-            }
-            builder.setPriority(Notification.PRIORITY_MIN);
-            String text = "";
-            int enable = 0;
-            for (int i = 0; i < mList.size(); i ++) {
-                Item item = mList.get(i);
-                if (item.isEnable()) {
-                    enable++;
-                    text += item.getTitle() + "\n";
-                }
-            }
-            if (text.equals("")) {
-                text = "还没有在做任务";
-            }
-            builder.addAction(0, "管理", PendingIntent.
-                    getActivity(this, 0, new Intent(this, ManageActivity.class), 0));
-            builder.setContentTitle(String.format("%1$s个在做任务", String.valueOf(enable)));
-            builder.setSubText(String.format("共%1$s个任务", String.valueOf(mList.size())));
-            builder.setContentText(text);
-            builder.setStyle(new Notification.BigTextStyle()
-                    .bigText(text));
-            return builder.build();
-        }
-    }
     private static class Item {
         private String mTitle;
         private boolean mEnable;
@@ -168,15 +102,17 @@ public class ContextCls {
         private ListView mListView;
         private ArrayList<Item> mList;
         private Adapter mAdapter;
+        private NotificationManager mNotificationManager;
+        private static final int ID = 0;
         @Override
         protected void onCreate( Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
             LinearLayout linearLayout = new LinearLayout(this);
             linearLayout.setOrientation(LinearLayout.HORIZONTAL);
-
-            startService(new Intent(getApplicationContext(), NotificationService.class));
             mListView = new ListView(this);
             mList = Item.getList(this);
+            mNotificationManager = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+            updateNotification();
             mAdapter = new Adapter();
             mListView.setAdapter(mAdapter);
             Button button_add = new Button(this);
@@ -210,8 +146,7 @@ public class ContextCls {
                 @Override
                 public void onClick(View v) {
                     Item.updateList(ManageActivity.this, mList);
-                    stopService(new Intent(getApplicationContext(), NotificationService.class));
-                    startService(new Intent(getApplicationContext(), NotificationService.class));
+                    updateNotification();
                     finish();
                 }
             });
@@ -238,6 +173,37 @@ public class ContextCls {
             view.addView(linearLayout);
             view.addView(mListView);
             setContentView(view);
+        }
+        private void updateNotification () {
+            Notification.Builder builder = new Notification.Builder(this);
+            builder.setOngoing(true);
+            builder.setSmallIcon(R.mipmap.ic_launcher);
+            if (Build.VERSION.SDK_INT >= 21) {
+                builder.setVisibility(Notification.VISIBILITY_SECRET);
+            }
+            builder.setPriority(Notification.PRIORITY_MIN);
+            String text = "";
+            int enable = 0;
+            for (int i = 0; i < mList.size(); i ++) {
+                Item item = mList.get(i);
+                if (item.isEnable()) {
+                    enable++;
+                    text += item.getTitle() + "\n";
+                }
+            }
+            if (text.equals("")) {
+                mNotificationManager.cancel(ID);
+                return;
+            }
+            builder.addAction(0, "管理", PendingIntent.
+                    getActivity(this, 0, new Intent(this, ManageActivity.class), 0));
+            builder.setContentTitle(String.format("%1$s个在做任务", String.valueOf(enable)));
+            builder.setSubText(String.format("共%1$s个任务", String.valueOf(mList.size())));
+            builder.setContentText(text);
+            builder.setStyle(new Notification.BigTextStyle()
+                    .bigText(text));
+            Notification notification = builder.build();
+            mNotificationManager.notify(ID, notification);
         }
         private class Adapter extends ArrayAdapter<Item> {
             Adapter () {
